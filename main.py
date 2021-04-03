@@ -3,19 +3,19 @@ import time
 from firebase_admin import db
 import subprocess as commands
 import datetime
+import os
 
-def getAxpertInfo():
+def getAxpertInfo(hasRun = False):
     axpertParam = {}
     #sudo mpp-solar -p /dev/hidraw0 -c QPIRI
     p = commands.Popen(['sudo', 'mpp-solar','-p', '/dev/hidraw0','--getstatus'], stdout=commands.PIPE,
     stderr=commands.PIPE)
     out, err = p.communicate()
-    test = out.decode()
     for axperInfo in out.decode().split('\n'):
         axperInfo_NoWhitespace = axperInfo.replace(" ", "")
         if("ac_input_voltage" in axperInfo_NoWhitespace):
             axpertParam["ac_input_voltage"] = axperInfo_NoWhitespace.split('\t')[1] + axperInfo_NoWhitespace.split('\t')[2]
-        
+
         if("pv_input_power" in axperInfo_NoWhitespace):
             axpertParam["pv_input_power"] = axperInfo_NoWhitespace.split('\t')[1] + axperInfo_NoWhitespace.split('\t')[2]
 
@@ -30,14 +30,33 @@ def getAxpertInfo():
 
     if(len(axpertParam)>0):
         axpertParam["Date_Time"] = str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        firebase.updateAxpertDict(axpertParam)
+        print("Saving...")
+        firebase.saveAxpertDictLocal("AxpertInfo", axpertParam)
+    else:
+        if(hasRun == False):
+            print("Failed, trying agian")
+            getAxpertInfo(True)
+    #    axpertParam["ac_input_voltage"] = "Error While Reading"
+    #    axpertParam["pv_input_power"] = "Error While Reading"
+    #    axpertParam["ac_output_voltage"] = "Error While Reading"
+    #    axpertParam["ac_output_active_power"] = "Error While Reading"
+    #    axpertParam["battery_voltage"] = "Error While Reading"
+    #    axpertParam["Date_Time"] = str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    #    firebase.updateAxpertDict(axpertParam)
+
 
 def FirebaseAlive(event):
     try:
-        getAxpertInfo()
-        pass    
-    except:
-        pass
+        print("getAxpertInfo")
+        if(int(event.data) == 0):
+             print("Restart Command Sent...")
+             os.system('sudo reboot')
+        print(str(event.data))
+        axpertDict = firebase.downloadeAxpertDict("AxpertInfo")
+        if(len(axpertDict)>0):
+            firebase.updateAxpertDict(axpertDict)
+    except Exception as e:
+        print(e)
 
 def startAllListenerEvents():
     try:
@@ -46,7 +65,7 @@ def startAllListenerEvents():
         while (True):
             if(requestedTimeReferance._thread.isAlive() == False):
                 requestedTimeReferance = db.reference( str(getMacAddress()) + '/Alive/Status/RequestedTime').listen(FirebaseAlive)
-
+            getAxpertInfo()
             time.sleep(15)
     except Exception as e:
         time.sleep(15)
