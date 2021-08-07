@@ -18,6 +18,7 @@ def updateAxpertDict(readingDic):
         pass
 
 def getMacAddress():
+    return "B8:27:EB:69:41:92"
     cmd = "hciconfig"
     device_id = "hci0"
     status, output = commands.getstatusoutput(cmd)

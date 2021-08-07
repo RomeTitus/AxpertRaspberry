@@ -2,9 +2,10 @@ import firebase
 import time
 from firebase_admin import db
 import subprocess as commands
+import threading
 import datetime
 import os
-
+startTime = 0
 def getAxpertInfo(hasRun = False):
     axpertParam = {}
     #sudo mpp-solar -p /dev/hidraw0 -c QPIRI
@@ -46,7 +47,9 @@ def getAxpertInfo(hasRun = False):
 
 
 def FirebaseAlive(event):
+    global startTime
     try:
+        startTime = int(round(datetime.datetime.now().timestamp()))
         print("getAxpertInfo")
         if(int(event.data) == 0):
              print("Restart Command Sent...")
@@ -58,6 +61,18 @@ def FirebaseAlive(event):
     except Exception as e:
         print(e)
 
+def SmartUploadExpert():
+    global startTime
+    oldAxpertDict = {'Date_Time': '2021-08-07 16:04:31'}
+    while True:
+        currentTime = int(round(datetime.datetime.now().timestamp()))
+        if(startTime + 240 > currentTime):
+            axpertDict = firebase.downloadeAxpertDict("AxpertInfo")
+            if(len(axpertDict)>0 and oldAxpertDict['Date_Time'] != axpertDict['Date_Time']):
+                oldAxpertDict = axpertDict
+                firebase.updateAxpertDict(axpertDict)
+        time.sleep(1)
+
 def startAllListenerEvents():
     try:
         requestedTimeReferance = db.reference( str(getMacAddress()) + '/Alive/Status/RequestedTime').listen(FirebaseAlive)
@@ -66,12 +81,13 @@ def startAllListenerEvents():
             if(requestedTimeReferance._thread.isAlive() == False):
                 requestedTimeReferance = db.reference( str(getMacAddress()) + '/Alive/Status/RequestedTime').listen(FirebaseAlive)
             getAxpertInfo()
-            time.sleep(15)
+            time.sleep(0.2)
     except Exception as e:
-        time.sleep(15)
+        time.sleep(0.2)
         startAllListenerEvents()
 
 def getMacAddress():
+    return "B8:27:EB:69:41:92"
     cmd = "hciconfig"
     device_id = "hci0"
     status, output = commands.getstatusoutput(cmd)
@@ -81,4 +97,7 @@ def getMacAddress():
 
 
 if(__name__ == __name__):
+    SmartUploadExpertProcess = threading.Thread(
+            target=SmartUploadExpert)
+    SmartUploadExpertProcess.start()
     startAllListenerEvents()
